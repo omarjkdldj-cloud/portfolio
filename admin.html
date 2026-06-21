@@ -768,44 +768,54 @@
   // Expose items globally for console access
   window._portfolioItems = items;
 
-  // ── Publish: deploy directly to Netlify ──
-  const NETLIFY_TOKEN='nfp_uHcCQbg9ah4MHfRaxP8u5P9uPYWPcZZud6d9';
-  const NETLIFY_SITE='c2470594-ee2f-443b-ac64-18029fb28204';
-
-  async function sha1(str){
-    const buf=new TextEncoder().encode(str);
-    const hash=await crypto.subtle.digest('SHA-1',buf);
-    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
+  // ── Publish: update admin-data.json on GitHub → Pages auto-deploys ──
+  const GH_REPO='omarjkdldj-cloud/portfolio';
+  const GH_API='https://api.github.com';
+  function getGHToken(){return localStorage.getItem('gh_token')||'';}
+  function setGHToken(t){localStorage.setItem('gh_token',t);}
 
   async function publishToNetlify(){
+    let token=getGHToken();
+    if(!token){
+      token=prompt('أدخل GitHub Token (مرة واحدة بس):');
+      if(!token) return;
+      setGHToken(token);
+    }
     showStatus(true,'جاري النشر على الموقع... ☁️');
     toast(1,'جاري النشر...');
     const data=JSON.stringify(items);
-    const dataHash=await sha1(data);
+    const headers={'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};
 
     try{
-      // Step 1: Create deploy with file hash
-      showStatus(true,'جاري إنشاء النسخة...');
-      const deployRes=await fetch(`https://api.netlify.com/api/v1/sites/${NETLIFY_SITE}/deploys`,{
-        method:'POST',
-        headers:{'Authorization':`Bearer ${NETLIFY_TOKEN}`,'Content-Type':'application/json'},
-        body:JSON.stringify({files:{'/data/admin-data.json':dataHash}})
-      });
-      if(!deployRes.ok) throw new Error('Deploy create failed: '+deployRes.status);
-      const deploy=await deployRes.json();
+      // Step 1: Get current file SHA (needed for update)
+      showStatus(true,'جاري قراءة البيانات الحالية...');
+      let currentSha=null;
+      try{
+        const getRes=await fetch(`${GH_API}/repos/${GH_REPO}/contents/data/admin-data.json`,{headers});
+        if(getRes.ok){
+          const fileInfo=await getRes.json();
+          currentSha=fileInfo.sha;
+        }
+      }catch(e){}
 
-      // Step 2: Upload the file
+      // Step 2: Update file via Contents API
       showStatus(true,'جاري رفع البيانات...');
-      const uploadRes=await fetch(`https://api.netlify.com/api/v1/deploys/${deploy.id}/files/data/admin-data.json`,{
+      const b64=btoa(unescape(encodeURIComponent(data)));
+      const body={message:'Update portfolio data',content:b64};
+      if(currentSha) body.sha=currentSha;
+
+      const updateRes=await fetch(`${GH_API}/repos/${GH_REPO}/contents/data/admin-data.json`,{
         method:'PUT',
-        headers:{'Authorization':`Bearer ${NETLIFY_TOKEN}`,'Content-Type':'application/octet-stream'},
-        body:data
+        headers,
+        body:JSON.stringify(body)
       });
-      if(!uploadRes.ok) throw new Error('File upload failed: '+uploadRes.status);
+      if(!updateRes.ok){
+        const err=await updateRes.json();
+        throw new Error(err.message||updateRes.status);
+      }
 
       setCache(items);
-      showStatus(true,'✅ تم النشر! الموقع هيتحدث خلال ثواني');
+      showStatus(true,'✅ تم النشر! الموقع هيتحدث خلال دقيقة');
       toast(1,'تم النشر بنجاح! 🎉');
     }catch(e){
       console.error('Deploy error:',e);
