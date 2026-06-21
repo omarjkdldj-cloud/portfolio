@@ -778,12 +778,13 @@
   async function publishToNetlify(){
     let token=getGHToken();
     const inputToken=$('#ghTokenInput').value.trim();
-    if(inputToken){
+    if(inputToken && inputToken.startsWith('ghp_')){
       token=inputToken;
       setGHToken(token);
-      $('#ghTokenInput').value='●●●●●●●●';
+      $('#ghTokenInput').value='';
+      $('#ghTokenInput').placeholder='✅ تم حفظ التوكن';
     }
-    if(!token){
+    if(!token || !token.startsWith('ghp_')){
       toast(0,'الصق GitHub Token في الخانة فوق ثم اضغط نشر');
       $('#ghTokenInput').focus();
       return;
